@@ -1,4 +1,4 @@
-# Terraform provider for Redfish
+## Terraform provider for Redfish
 The Terraform provider for Redfish is a plugin for Terraform that allows for full lifecycle management of x86 servers using Redfish REST APIs. For more details on Redfish, please refer to DMTF Redfish specification [here][redfish-website].
 
 For general information about Terraform, visit the [official website][tf-website] and the [GitHub project page][tf-github].
