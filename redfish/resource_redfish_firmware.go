@@ -133,11 +133,24 @@ func resourceRedfishFirmwareUpdate(ctx context.Context, d *schema.ResourceData, 
 		}
 		defer localFileReader.Close()
 
-		updateUrl := update.HTTPPushURI
+		updateURL := update.HTTPPushURI
+
+		parameters := map[string]interface{}{
+			"UpdateRepository": true,
+			"UpdateTarget":     true,
+			"ETag":             "sometag",
+			"Section":          0,
+		}
+
+		parameterBytes, err := json.Marshal(parameters)
+		if err != nil {
+			return diag.Errorf("Error creating parameters: %s", err)
+		}
+		payloadBuffer := bytes.NewReader(parameterBytes)
 
 		values := map[string]io.Reader{
 			"sessionKey": strings.NewReader(session.Token),
-			"parameters": strings.NewReader("{'UpdateRepository': true, 'UpdateTarget': true, 'ETag': 'atag', 'Section': 0}"),
+			"parameters": payloadBuffer,
 			"file":       localFileReader,
 		}
 
@@ -150,44 +163,11 @@ func resourceRedfishFirmwareUpdate(ctx context.Context, d *schema.ResourceData, 
 			values["compsig"] = sigFileReader
 		}
 
-		var b bytes.Buffer
-		w := multipart.NewWriter(&b)
-		for key, r := range values {
-			var fw io.Writer
-			if x, ok := r.(*os.File); ok {
-				// Add an image file
-				if fw, err = w.CreateFormFile(key, x.Name()); err != nil {
-					return diag.Errorf("Error adding file %s to multipart request: %s", key, err)
-				}
-			} else {
-				// Add other fields
-				if fw, err = w.CreateFormField(key); err != nil {
-					return diag.Errorf("Error adding %s to multipart request: %s", key, err)
-				}
-			}
-			if _, err = io.Copy(fw, r); err != nil {
-				return diag.Errorf("Error copying %s to multipart request: %s", key, err)
-			}
-
-		}
-		w.Close()
-
-		req, err := http.NewRequest("POST", updateUrl, &b)
-		if err != nil {
-			return diag.Errorf("Error creating firmware post request: %s", err)
-		}
-		req.Header.Set("Content-Type", w.FormDataContentType())
-		req.Header.Set("X-Auth-Token", session.Token)
-		req.Header.Set("Accept", "application/json")
-
-		response, err := conn.HTTPClient.Do(req)
+		response, err := conn.PostMultipart(updateURL, values)
 		if err != nil {
 			return diag.Errorf("Error posting firmware: %s", err)
 		}
 		defer response.Body.Close()
-
-		dump("response.status", response.Status)
-		dumpReader("response.json", response.Body)
 	}
 
 	if firmware != nil {
@@ -196,22 +176,6 @@ func resourceRedfishFirmwareUpdate(ctx context.Context, d *schema.ResourceData, 
 
 	log.Printf("[DEBUG] %s: Update finished successfully", d.Id())
 	return diags
-}
-
-func dump(filename string, data string) {
-	f, err := os.Create(filename)
-	if err != nil {
-		defer f.Close()
-		f.WriteString(data)
-	}
-}
-
-func dumpReader(filename string, data io.ReadCloser) {
-	f, err := os.Create(filename)
-	if err != nil {
-		defer f.Close()
-		io.Copy(f, data)
-	}
 }
 
 func resourceRedfishFirmwareRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
