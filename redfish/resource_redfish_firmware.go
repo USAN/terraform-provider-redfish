@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	Name              string = "name"
-	Version           string = "version"
-	LocalFile         string = "local_file"
-	SignatureFile     string = "signature_file"
-	UpdateRecoverySet string = "update_recovery_set"
-	TaskURI           string = "task_uri"
+	nameName              string = "name"
+	versionName           string = "versionName"
+	localFileName         string = "local_file"
+	signatureFileName     string = "signature_file"
+	updateRecoverySetName string = "update_recovery_set"
+	taskURIName           string = "task_uri"
 )
 
 func resourceRedfishFirmware() *schema.Resource {
@@ -33,26 +33,26 @@ func resourceRedfishFirmware() *schema.Resource {
 		UpdateContext: resourceRedfishFirmwareUpdate,
 		DeleteContext: resourceRedfishFirmwareDelete,
 		Schema: map[string]*schema.Schema{
-			Name: {
+			nameName: {
 				Type:        schema.TypeString,
 				Required:    true,
 				Description: "The name of the firmware to be updated.",
 			},
 
-			Version: {
+			versionName: {
 				Type:        schema.TypeString,
 				Required:    true,
-				Description: "The desired firmware version. Should match the version of the referenced update.",
+				Description: "The desired firmware versionName. Should match the versionName of the referenced update.",
 			},
 
-			LocalFile: {
+			localFileName: {
 				Type:        schema.TypeString,
 				Required:    true,
 				Description: "The path to a local file that contains the firmware update.",
 				//DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool { return true },
 			},
 
-			SignatureFile: {
+			signatureFileName: {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Default:     "",
@@ -60,7 +60,7 @@ func resourceRedfishFirmware() *schema.Resource {
 				//DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool { return true },
 			},
 
-			UpdateRecoverySet: {
+			updateRecoverySetName: {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Default:     false,
@@ -68,7 +68,7 @@ func resourceRedfishFirmware() *schema.Resource {
 				//DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool { return true },
 			},
 
-			TaskURI: {
+			taskURIName: {
 				Type:        schema.TypeString,
 				Description: "Firmware update task uri",
 				Computed:    true,
@@ -89,21 +89,21 @@ func resourceRedfishFirmwareUpdate(ctx context.Context, d *schema.ResourceData, 
 		return diag.Errorf("error fetching firmware inventory: %s", err)
 	}
 
-	name := d.Get(Name)
-	version := d.Get(Version)
-	localFile := d.Get(LocalFile)
-	signatureFile, ok := d.GetOk(SignatureFile)
+	name := d.Get(nameName)
+	version := d.Get(versionName)
+	localFile := d.Get(localFileName)
+	signatureFile, ok := d.GetOk(signatureFileName)
 	if !ok {
 		signatureFile = ""
-		d.Set(SignatureFile, "")
+		d.Set(signatureFileName, "")
 	}
-	updateRecoverySet, ok := d.GetOk(UpdateRecoverySet)
+	updateRecoverySet, ok := d.GetOk(updateRecoverySetName)
 	if !ok {
 		updateRecoverySet = false
-		d.Set(UpdateRecoverySet, updateRecoverySet)
+		d.Set(updateRecoverySetName, updateRecoverySet)
 	}
 
-	d.Set(TaskURI, "")
+	d.Set(taskURIName, "")
 
 	firmwares, err := inventory.Firmwares()
 	if err != nil {
@@ -225,7 +225,7 @@ func resourceRedfishFirmwareRead(ctx context.Context, d *schema.ResourceData, m 
 		return diag.Errorf("error fetching firmware inventory: %s", err)
 	}
 
-	name := d.Get(Name)
+	name := d.Get(nameName)
 
 	firmwares, err := inventory.Firmwares()
 	if err != nil {
@@ -245,7 +245,7 @@ func resourceRedfishFirmwareRead(ctx context.Context, d *schema.ResourceData, m 
 		return diags
 	}
 
-	d.Set(Version, firmware.Version)
+	d.Set(versionName, firmware.Version)
 	d.SetId(firmware.ODataID)
 
 	log.Printf("[DEBUG] %s: Read finished successfully", d.Id())
