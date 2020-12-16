@@ -6,15 +6,13 @@ import (
 	"encoding/json"
 	"io"
 	"log"
-	"mime/multipart"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/stmcginnis/gofish"
-	"github.com/stmcginnis/gofish/common"
+	"github.com/stmcginnis/gofish/redfish"
 )
 
 const (
@@ -84,7 +82,18 @@ func resourceRedfishFirmwareUpdate(ctx context.Context, d *schema.ResourceData, 
 
 	conn := m.(*gofish.APIClient)
 
-	inventory, err := GetFirmwareInventory(conn)
+	conn, err := conn.CloneWithSession()
+	if err == nil {
+		defer conn.Logout()
+	}
+
+	service := conn.Service
+	update, err := service.UpdateService()
+	if err != nil {
+		return diag.Errorf("error fetching update service: %s", err)
+	}
+
+	inventory, err := update.FirmwareInventory()
 	if err != nil {
 		return diag.Errorf("error fetching firmware inventory: %s", err)
 	}
@@ -105,12 +114,12 @@ func resourceRedfishFirmwareUpdate(ctx context.Context, d *schema.ResourceData, 
 
 	d.Set(taskURIName, "")
 
-	firmwares, err := inventory.Firmwares()
+	firmwares, err := inventory.Members()
 	if err != nil {
 		return diag.Errorf("error fetching firmware details: %s", err)
 	}
 
-	var firmware *Firmware
+	var firmware *redfish.SoftwareInventory
 	for _, f := range firmwares {
 		if f.Name == name {
 			firmware = f
@@ -119,9 +128,6 @@ func resourceRedfishFirmwareUpdate(ctx context.Context, d *schema.ResourceData, 
 	}
 
 	if firmware == nil || firmware.Version != version {
-		service := conn.Service
-		update, _ := service.UpdateService()
-
 		session, err := conn.GetSession()
 		if err != nil {
 			return diag.Errorf("Error fetching session token: %s", err)
@@ -184,19 +190,25 @@ func resourceRedfishFirmwareRead(ctx context.Context, d *schema.ResourceData, m 
 
 	conn := m.(*gofish.APIClient)
 
-	inventory, err := GetFirmwareInventory(conn)
+	service := conn.Service
+	update, err := service.UpdateService()
+	if err != nil {
+		return diag.Errorf("error fetching update service: %s", err)
+	}
+
+	inventory, err := update.FirmwareInventory()
 	if err != nil {
 		return diag.Errorf("error fetching firmware inventory: %s", err)
 	}
 
 	name := d.Get(nameName)
 
-	firmwares, err := inventory.Firmwares()
+	firmwares, err := inventory.Members()
 	if err != nil {
 		return diag.Errorf("error fetching firmware details: %s", err)
 	}
 
-	var firmware *Firmware
+	var firmware *redfish.SoftwareInventory
 	for _, f := range firmwares {
 		if f.Name == name {
 			firmware = f
@@ -224,106 +236,4 @@ func resourceRedfishFirmwareDelete(ctx context.Context, d *schema.ResourceData, 
 	d.SetId("")
 
 	return diags
-}
-
-type Firmware struct {
-	common.Entity
-
-	Description string
-	Name        string
-	Version     string
-	rawData     []byte
-}
-
-type FirmwareInventory struct {
-	common.Entity
-
-	Name      string
-	firmwares []string
-	rawData   []byte
-}
-
-func (firmware *Firmware) UnmarshalJSON(b []byte) error {
-	type temp Firmware
-	var t struct {
-		temp
-	}
-
-	err := json.Unmarshal(b, &t)
-	if err != nil {
-		return err
-	}
-
-	// Extract the links to other entities for later
-	*firmware = Firmware(t.temp)
-	firmware.rawData = b
-	return nil
-}
-
-func (firmware *FirmwareInventory) UnmarshalJSON(b []byte) error {
-	type temp FirmwareInventory
-	var t struct {
-		temp
-		Members common.Links
-	}
-
-	err := json.Unmarshal(b, &t)
-	if err != nil {
-		return err
-	}
-
-	// Extract the links to other entities for later
-	*firmware = FirmwareInventory(t.temp)
-	firmware.rawData = b
-	firmware.firmwares = t.Members.ToStrings()
-	return nil
-}
-
-func (firmware *FirmwareInventory) Firmwares() ([]*Firmware, error) {
-	var result []*Firmware
-	for _, firmwareLink := range firmware.firmwares {
-		firmware, err := GetFirmware(firmware.Client, firmwareLink)
-		if err != nil {
-			return result, nil
-		}
-		result = append(result, firmware)
-	}
-	return result, nil
-}
-
-func GetFirmware(conn common.Client, uri string) (*Firmware, error) {
-	resp, err := conn.Get(uri)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var firmware Firmware
-	err = json.NewDecoder(resp.Body).Decode(&firmware)
-	if err != nil {
-		return nil, err
-	}
-	firmware.SetClient(conn)
-	return &firmware, nil
-}
-
-func GetFirmwareInventory(conn *gofish.APIClient) (*FirmwareInventory, error) {
-
-	service := conn.Service
-	update, err := service.UpdateService()
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := conn.Get(update.FirmwareInventory)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var inventory FirmwareInventory
-	err = json.NewDecoder(resp.Body).Decode(&inventory)
-	if err != nil {
-		return nil, err
-	}
-	inventory.SetClient(conn)
-	return &inventory, nil
 }
